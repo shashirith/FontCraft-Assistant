@@ -1,0 +1,112 @@
+import React, { useState, useRef, useCallback } from 'react';
+import { cn } from '@/lib/utils';
+import Button from '@/components/ui/Button';
+import Textarea, { TextareaRef } from '@/components/ui/Textarea';
+
+interface MessageInputProps {
+  onSendMessage: (content: string) => Promise<void>;
+  disabled?: boolean;
+  placeholder?: string;
+  className?: string;
+}
+
+const MessageInput = React.memo<MessageInputProps>(({
+  onSendMessage,
+  disabled = false,
+  placeholder = 'Type a message...',
+  className,
+}) => {
+  const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const textareaRef = useRef<TextareaRef>(null);
+  const sendingRef = useRef<string | null>(null);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessage(e.target.value);
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage || isSending || disabled) return;
+    
+    if (sendingRef.current === trimmedMessage) {
+      console.warn('Duplicate send prevented for:', trimmedMessage);
+      return;
+    }
+
+    setIsSending(true);
+    sendingRef.current = trimmedMessage;
+    
+    try {
+      await onSendMessage(trimmedMessage);
+      setMessage('');
+      textareaRef.current?.reset();
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    } finally {
+      setIsSending(false);
+      sendingRef.current = null;
+    }
+  }, [message, isSending, disabled, onSendMessage]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  React.useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  return (
+    <div className={cn('border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800', className)}>
+      <div className="flex items-start gap-2 p-3 md:p-4 pb-safe">
+        <div className="flex-1">
+          <Textarea
+            ref={textareaRef}
+            value={message}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled || isSending}
+            autoResize
+            minHeight={40}
+            maxHeight={120}
+            helperText="Press Enter to send, Shift+Enter for new line"
+            className="border-gray-300 dark:border-gray-600 text-base md:text-sm"
+          />
+        </div>
+        
+        <Button
+          onClick={handleSend}
+          disabled={!message.trim() || isSending || disabled}
+          isLoading={isSending}
+          size="md"
+          className="flex-shrink-0 min-w-[44px] min-h-[44px] touch-manipulation"
+          aria-label="Send message"
+        >
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+            />
+          </svg>
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+MessageInput.displayName = 'MessageInput';
+
+export default MessageInput; 
