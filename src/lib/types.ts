@@ -14,6 +14,7 @@ export interface Message {
   type: 'text' | 'image' | 'file';
   edited?: boolean;
   editedAt?: Date;
+  replyTo?: string;
 }
 
 export interface Chat {
@@ -32,6 +33,7 @@ export interface Chat {
 
 export interface ChatState {
   chats: Chat[];
+  replyTo: Message | null;
   activeChat: Chat | null;
   currentUser: User;
   isLoading: boolean;
@@ -49,6 +51,7 @@ export interface SendMessageRequest {
   chatId: string;
   content: string;
   type: 'text' | 'image' | 'file';
+  replyToId?: string;
 }
 
 export interface ChatListItem {
@@ -85,6 +88,7 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
 export interface UseChatReturn {
   state: ChatState;
   actions: {
+    replyToMessage: (message: Message | null) => void;
     createChat: (request: CreateChatRequest) => Promise<Chat>;
     deleteChat: (chatId: string) => Promise<void>;
     sendMessage: (request: SendMessageRequest) => Promise<Message>;

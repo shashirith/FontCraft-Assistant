@@ -212,7 +212,7 @@ export const apiStubs = {
     return newChat;
   },
 
-  sendMessage: async (chatId: string, content: string): Promise<Message> => {
+  sendMessage: async (chatId: string, content: string, replyToId?: string): Promise<Message> => {
     await new Promise(resolve => setTimeout(resolve, 200));
     
     const message: Message = {
@@ -221,6 +221,7 @@ export const apiStubs = {
       senderId: currentUser.id,
       timestamp: new Date(),
       type: 'text',
+      ...(replyToId && { replyTo: replyToId }),
     };
     
     return message;

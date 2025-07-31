@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { cn, shouldShowAvatar } from '@/lib/utils';
+import React, { useRef, useEffect } from 'react';
+import { cn, shouldShowAvatar, isSameDay } from '@/lib/utils';
 import { Message, User } from '@/lib/types';
 import MessageItem from './MessageItem';
 
@@ -10,159 +10,96 @@ interface MessageListProps {
   className?: string;
 }
 
-const MessageList = React.memo<MessageListProps>(({
+const MessageList: React.FC<MessageListProps> = ({
   messages,
   users,
   currentUserId,
   className,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const userMap = React.useMemo(() => {
-    return users.reduce((map, user) => {
-      map[user.id] = user;
-      return map;
-    }, {} as Record<string, User>);
-  }, [users]);
-
-  const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end',
-        inline: 'nearest'
-      });
-    }
-  }, []);
-
-  const debouncedScrollToBottom = useCallback(() => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-    scrollTimeoutRef.current = setTimeout(() => {
-      scrollToBottom();
-    }, 100);
-  }, [scrollToBottom]);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    debouncedScrollToBottom();
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, [messages.length, debouncedScrollToBottom]);
+    scrollToBottom();
+  }, [messages]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  const getUserById = (userId: string): User | undefined => {
+    return users.find(user => user.id === userId);
+  };
 
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+  const getMessageById = (messageId: string): Message | undefined => {
+    return messages.find(msg => msg.id === messageId);
+  };
+
+  const renderMessages = () => {
+    const messageGroups: React.ReactElement[] = [];
+    let currentDate: Date | null = null;
+
+    messages.forEach((message, index) => {
+      const sender = getUserById(message.senderId);
+      const isOwn = message.senderId === currentUserId;
+      const previousMessage = index > 0 ? messages[index - 1] : undefined;
+      const nextMessage = index < messages.length - 1 ? messages[index + 1] : undefined;
       
-      container.dataset.isNearBottom = isNearBottom.toString();
-    };
+      const showAvatar = shouldShowAvatar(message, previousMessage);
+      const isFirst = !previousMessage || shouldShowAvatar(message, previousMessage);
+      const isLast = !nextMessage || shouldShowAvatar(nextMessage, message);
 
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
+      // Find replied message and sender if this is a reply
+      const repliedMessage = message.replyTo ? getMessageById(message.replyTo) : undefined;
+      const repliedSender = repliedMessage ? getUserById(repliedMessage.senderId) : undefined;
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || messages.length === 0) return;
-
-    const isNearBottom = container.dataset.isNearBottom !== 'false';
-    
-    if (isNearBottom) {
-      setTimeout(() => {
-        scrollToBottom();
-      }, 50);
-    }
-  }, [messages.length]);
-
-  if (messages.length === 0) {
-    return (
-      <div className={cn('flex items-center justify-center p-8 h-full', className)}>
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-              />
-            </svg>
+      // Date separator
+      if (!currentDate || !isSameDay(message.timestamp, currentDate)) {
+        currentDate = message.timestamp;
+        messageGroups.push(
+          <div
+            key={`date-${message.timestamp.toISOString()}`}
+            className="flex justify-center my-4"
+          >
+            <div className="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-full text-xs text-gray-600 dark:text-gray-400">
+              {message.timestamp.toLocaleDateString([], {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </div>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-            No messages yet
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Start the conversation by sending a message below.
-          </p>
-        </div>
-      </div>
-    );
-  }
+        );
+      }
+
+      if (!sender) return;
+
+      messageGroups.push(
+        <MessageItem
+          key={message.id}
+          message={message}
+          sender={sender}
+          isOwn={isOwn}
+          showAvatar={showAvatar}
+          isFirst={isFirst}
+          isLast={isLast}
+          repliedMessage={repliedMessage}
+          repliedSender={repliedSender}
+        />
+      );
+    });
+
+    return messageGroups;
+  };
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'overflow-y-auto overflow-x-hidden custom-scrollbar',
-        'bg-white dark:bg-gray-800',
-        'h-full min-h-0',
-        className
-      )}
-      data-is-near-bottom="true"
-    >
-      <div className="flex flex-col min-h-full">
-        <div className="flex-1" />
-        <div className="py-4">
-          {messages.map((message, index) => {
-            const sender = userMap[message.senderId];
-            const isOwn = message.senderId === currentUserId;
-            const previousMessage = index > 0 ? messages[index - 1] : undefined;
-            const nextMessage = index < messages.length - 1 ? messages[index + 1] : undefined;
-            
-            const showAvatar = shouldShowAvatar(message, previousMessage);
-            const isFirst = index === 0 || shouldShowAvatar(message, previousMessage);
-            const isLast = index === messages.length - 1 || 
-               (nextMessage ? shouldShowAvatar(nextMessage, message) : true);
-
-            if (!sender) {
-              console.warn(`Sender not found for message ${message.id}`);
-              return null;
-            }
-
-            return (
-              <MessageItem
-                key={message.id}
-                message={message}
-                sender={sender}
-                isOwn={isOwn}
-                showAvatar={showAvatar}
-                isFirst={isFirst}
-                isLast={isLast}
-              />
-            );
-          })}
-          
-          <div ref={messagesEndRef} className="h-0" />
-        </div>
+    <div className={cn('flex flex-col overflow-y-auto', className)}>
+      <div className="flex-1 py-4">
+        {renderMessages()}
+        <div ref={messagesEndRef} />
       </div>
     </div>
   );
-});
-
-MessageList.displayName = 'MessageList';
+};
 
 export default MessageList; 

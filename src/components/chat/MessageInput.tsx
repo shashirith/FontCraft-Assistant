@@ -2,9 +2,11 @@ import React, { useState, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import Button from '@/components/ui/Button';
 import Textarea, { TextareaRef } from '@/components/ui/Textarea';
+import { useChat } from '@/hooks/useChat';
+import ReplyPreview from './ReplyPreview';
 
 interface MessageInputProps {
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: string, replyToId?: string) => Promise<void>;
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -20,10 +22,18 @@ const MessageInput = React.memo<MessageInputProps>(({
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<TextareaRef>(null);
   const sendingRef = useRef<string | null>(null);
+  const { state, actions } = useChat();
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
   }, []);
+
+  const replyingToMessage = state.replyTo;
+  
+  // Find the sender of the message being replied to
+  const replyingSender = replyingToMessage 
+    ? state.activeChat?.participants.find(p => p.id === replyingToMessage.senderId)
+    : undefined;
 
   const handleSend = useCallback(async () => {
     const trimmedMessage = message.trim();
@@ -38,16 +48,20 @@ const MessageInput = React.memo<MessageInputProps>(({
     sendingRef.current = trimmedMessage;
     
     try {
-      await onSendMessage(trimmedMessage);
+      await onSendMessage(trimmedMessage, replyingToMessage?.id);
       setMessage('');
       textareaRef.current?.reset();
+      // Clear reply state after sending
+      if (replyingToMessage) {
+        actions.replyToMessage(null);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
     } finally {
       setIsSending(false);
       sendingRef.current = null;
     }
-  }, [message, isSending, disabled, onSendMessage]);
+  }, [message, replyingToMessage, isSending, disabled, onSendMessage, actions]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -56,12 +70,25 @@ const MessageInput = React.memo<MessageInputProps>(({
     }
   }, [handleSend]);
 
+  const handleCancelReply = useCallback(() => {
+    actions.replyToMessage(null);
+  }, [actions]);
+
   React.useEffect(() => {
     textareaRef.current?.focus();
   }, []);
 
   return (
     <div className={cn('border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800', className)}>
+      {/* Reply Preview */}
+      {replyingToMessage && replyingSender && (
+        <ReplyPreview
+          replyTo={replyingToMessage}
+          sender={replyingSender}
+          onClose={handleCancelReply}
+        />
+      )}
+      
       <div className="flex items-start gap-2 p-3 md:p-4 pb-safe">
         <div className="flex-1">
           <Textarea

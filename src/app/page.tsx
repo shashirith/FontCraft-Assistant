@@ -22,13 +22,14 @@ export default function ChatApp() {
     setShowMobileChat(false);
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, replyToId?: string) => {
     if (!state.activeChat) return;
     
     await actions.sendMessage({
       chatId: state.activeChat.id,
       content,
       type: 'text',
+      replyToId,
     });
   };
 
